@@ -1,0 +1,126 @@
+import os
+import logging
+import subprocess
+import configparser
+from ftplib import FTP
+from logging.handlers import RotatingFileHandler
+
+
+# 1、推送文件
+subprocess.run(['adb', 'push', r'D:\test\test.txt', '/storage/emulated/0/Scan'])
+# 2、shell内部命令执行，命令间以分号分隔
+res = subprocess.run(['adb', 'shell', 'cd', '/storage/emulated/0/Scan', ';', 'ls', '/storage/emulated'], capture_output=True)
+print(res.stdout.decode('utf-8'))
+
+----------------------------------------
+配置文件内容格式：
+[log_config]
+logFile = logs/test.log
+outType = 1
+----------------------------------------
+def getConfigParams(filepath): 
+    """
+    :param filepath: 文件路径
+    :return: 返回dict
+    """
+    config = configparser.ConfigParser()
+    config.read(filepath)
+    configparams = {
+        'logFile': config.get('log_config', 'logFile'),
+        'outType': config.getint('log_config', 'outType')
+    }
+    return configparams
+
+
+def log(logfile, outtype=3, level=20, filesize=10000, filecount=5): 
+    """
+    :param logfile: 存储文件名
+    :param level: 日志级别
+    :param outtype: 输出类型，1->输出保存至文件 2->输出至console 3->输出至console同时保存至文件
+    :param filesize: 日志大小，默认为10000->10MB
+    :param filecount: 日志文件数量
+    :return:
+    """
+    handlers = []
+    fmt = logging.Formatter("%(asctime)s-%(filename)s-%(lineno)d-%(levelname)s:%(message)s")
+    logging.getLogger().setLevel(level)
+    filehandler = RotatingFileHandler(logfile, mode='a', maxBytes=filesize * 1024, backupCount=filecount,
+                                      encoding='utf-8')
+    filehandler.setFormatter(fmt)
+    streamhandler = logging.StreamHandler()
+    streamhandler.setFormatter(fmt)
+    if outtype == 1:
+        handlers.append(filehandler)
+    elif outtype == 2:
+        handlers.append(streamhandler)
+    else:
+        handlers.append(filehandler)
+        handlers.append(streamhandler)
+    for handler in handlers:
+        logging.getLogger().addHandler(handler)
+
+
+def downloadFile(remoteDir, localDir, file, ip, port, username, passwd):
+    """
+    :param remoteDir: 服务器上的目录
+    :param localDir: 本地目录
+    :param file: 待下载的文件名
+    :param ip: 服务器ip
+    :param port: 服务器端口
+    :return: 
+    """
+    ftp = FTP()
+    ftp.connect(ip, port)
+    ftp.login(user=username, passwd=passwd)
+    ftp.cwd(remoteDir)  # 切到远程目录
+    os.makedirs(localDir, exist_ok=True)  # 创建本地目录，exist_ok=True：目录存在也不报错
+    with open(localDir + '/' + file, 'wb') as local_file:
+        ftp.retrbinary('RETR' + file, local_file.write)  # 'RETR'表示下载文件
+    # file_list = ftp.nlst()  # 列出远程目录下的所有文件和子目录
+    # for file in file_list:
+    #     try:  # 判断file是否为目录
+    #         ftp.cwd(file)
+    #         ftp.cwd('..')
+    #         # 如果是目录，则递归下载子目录
+    #         downloadFile(remoteDir + '/' + file, localDir + '/' + file)
+    #     except:
+    #         # 如果不是目录，则下载文件
+    #         with open(localDir + '/' + file, 'wb') as local_file:
+    #             ftp.retrbinary('RETR' + file, local_file.write)
+    ftp.quit()  # 关闭连接
+
+
+def splite_largefile(filepath, single_size):
+    """
+    :param filepath: 待分割文件路径
+    :param single_size: 分割成单个文件的大小，单位 MB
+    :return: 分割后生成的文件保存在当前路径
+    """
+    with open(filepath, 'rb') as file:
+        fn,hz = os.path.splitext(filepath)
+        chunk_num = 0
+        chunk_size_MB = single_size * 1024 * 1024
+        while True:
+            chunk = file.read(chunk_size_MB)
+            if not chunk:
+                break
+            chunk_num += 1
+            with open(f"{fn}_part{chunk_num}{hz}", "wb") as chunk_file:
+                chunk_file.write(chunk)
+
+
+def generate_largefile(filepath, size_gb):
+    """
+    :param filepath: 文件保存路径（包括文件名）
+    :param size_gb: 需要生成的文件大小，单位GB
+    :return:
+    """
+    write_size = 1024 * 1024  # 每次写入文件的数据大小，1MB
+    size_bytes = size_gb * 1024 * 1024 * 1024
+    with open(filepath, 'wb') as file:
+        while size_bytes > 0:
+            chunk = os.urandom(write_size)  # 生成随机数据块
+            if size_bytes < write_size:
+                chunk = chunk[:size_bytes]  # 如果剩余字节数不足一个数据块大小，则截断数据块
+            file.write(chunk)
+            size_bytes -= write_size
