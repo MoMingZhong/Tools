@@ -1,0 +1,76 @@
+import os
+import re
+import time
+import requests
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+
+
+class picturesDowload():
+　　def __init__(self, insearch, savepath=os.path.dirname(__file__), timeout=10):
+　　　　self.insearch = insearch
+　　　　self.picspath = savepath
+　　　　self.options = webdriver.ChromeOptions()
+　　　　self.options.add_argument('headless') # 设置不打开浏览器
+　　　　self.driver = webdriver.Chrome(options=self.options)
+　　　　self.driver.implicitly_wait(5)
+
+　　def loadPage(self):
+　　　　self.driver.get('https://www.baidu.com/')
+　　　　self.driver.find_element(By.LINK_TEXT, '图片').click() # 点击【图片】文本链接
+　　　　try:
+　　　　　　self.driver.switch_to.window(self.driver.window_handles[1]) # 切换句柄
+　　　　except:
+　　　　　　pass
+　　　　self.driver.find_element(By.ID, 'kw').send_keys(self.insearch) # 输入搜索的关键字
+　　　　self.driver.find_element(By.XPATH, '//*[@id="homeSearchForm"]/span[2]/input').click() # 执行搜索
+　　　　js = "return action=document.body.scrollHeight"
+　　　　height = self.driver.execute_script(js) # 获取滚动条高度
+　　　　self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight)') # 将滚动条拖至底部
+　　　　t1 = int(time.time()) # 初始时间戳
+　　　　num = 1
+　　　　while True:
+　　　　　　t2 = int(time.time())
+　　　　　　if t2 - t1 < 10: # 判断初始时间戳和当前时间戳差值，小于10秒则下拉滚动条
+　　　　　　　　new_height = self.driver.execute_script(js)
+　　　　　　　　if new_height > height:
+　　　　　　　　　　self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight)') # 将滚动条拖至底部
+　　　　　　　　　　height = new_height # 重置滚动条高度数值
+　　　　　　　　　　t1 = int(time.time()) # 重置时间戳
+　　　　　　elif num < 4: # 当超过10秒页面高度仍然没有更新时，进入重试逻辑，重试3次，每次等待3秒
+　　　　　　　　print('下拉滚动条，第%d次重试' % num)
+　　　　　　　　time.sleep(3)
+　　　　　　　　self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight)') # 将滚动条拖至底部
+　　　　　　　　t1 = int(time.time()) # 重置时间戳
+　　　　　　　　num = num + 1
+　　　　　　else:
+　　　　　　　　print("重试结束,当前页面数据已加载完毕！")
+　　　　　　　　self.driver.execute_script('window.scrollTo(0, 0)') # 滚动条调整至页面顶部
+　　　　　　　　break
+
+　　def dowload(self):
+　　　　self.picsPath = os.path.join(self.picspath, self.insearch)
+　　　　if not os.path.exists(self.picsPath):
+　　　　　　os.makedirs(self.picsPath)
+　　　　self.loadPage()
+　　　　img_urls = re.findall(r'src="https://img\S+', self.driver.page_source) # 搜索页面中所有满足条件的图片链接
+　　　　print('本次搜索到图片%d张' % len(img_urls))
+　　　　for num, url in enumerate(img_urls): # 获取图片url
+　　　　　　url = url.split('"')[1]
+　　　　　　img_urls[num] = url
+
+　　　　t3 = int(time.time())
+　　　　for key, url in enumerate(img_urls):
+　　　　　　res = requests.get(url)
+　　　　　　with open(r"%s\%d.png" % (self.picsPath, key), 'wb') as f:
+　　　　　　　　f.write(res.content)
+　　　　　　t4 = int(time.time())
+　　　　　　if key == len(img_urls) - 1:
+　　　　　　　　print('已下载完成进度100%')
+　　　　　　elif t4 - t3 > 5:
+　　　　　　　　print('已下载完成进度 {0}%'.format(int(key / len(img_urls) * 100)))
+　　　　　　　　t3 = int(time.time())
+
+if __name__ == '__main__':
+　　obj = picturesDowload('刘亦菲')
+　　obj.dowload()
