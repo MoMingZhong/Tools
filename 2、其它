@@ -32,32 +32,33 @@ def getConfigParams(filepath):
     return configparams
 
 
-def log(logfile, outtype=3, level=20, filesize=10000, filecount=5): 
+def log(logfile, level=logging.INFO, outtype=3, filesize=10*1024*1024, filecount=5):
     """
     :param logfile: 存储文件名
     :param level: 日志级别
     :param outtype: 输出类型，1->输出保存至文件 2->输出至console 3->输出至console同时保存至文件
-    :param filesize: 日志大小，默认为10000->10MB
+    :param filesize: 日志大小，默认为10*1024*1024 ->10MB
     :param filecount: 日志文件数量
     :return:
     """
     handlers = []
+    logger = logging.getLogger(__name__)
+    logger.setLevel(level)
+
     fmt = logging.Formatter("%(asctime)s-%(filename)s-%(lineno)d-%(levelname)s:%(message)s")
-    logging.getLogger().setLevel(level)
-    filehandler = RotatingFileHandler(logfile, mode='a', maxBytes=filesize * 1024, backupCount=filecount,
-                                      encoding='utf-8')
-    filehandler.setFormatter(fmt)
-    streamhandler = logging.StreamHandler()
-    streamhandler.setFormatter(fmt)
-    if outtype == 1:
-        handlers.append(filehandler)
-    elif outtype == 2:
-        handlers.append(streamhandler)
-    else:
-        handlers.append(filehandler)
-        handlers.append(streamhandler)
+
+    if outtype in (1, 3):
+        file_handler = RotatingFileHandler(logfile, maxBytes=filesize, backupCount=filecount, encoding='utf-8')
+        file_handler.setFormatter(fmt)
+        handlers.append(file_handler)  # outtype等于1或3，将文件处理器添加到处理器列表
+
+    if outtype in (2, 3):
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(fmt)
+        handlers.append(console_handler)  # outtype等于2或3，将控制台处理器添加到处理器列表
+
     for handler in handlers:
-        logging.getLogger().addHandler(handler)
+        logger.addHandler(handler)
 
 
 def downloadFile(remoteDir, localDir, file, ip, port, username, passwd):
